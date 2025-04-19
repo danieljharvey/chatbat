@@ -1,0 +1,10 @@
+[package]
+name = "ollama"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ollama-rs = { git = "https://github.com/pepperoni21/ollama-rs.git", tag = "v0.3.0", features = ["stream"] }
+tokio = "*"
+tokio-stream = "*"
+futures = "*"
