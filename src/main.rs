@@ -2,7 +2,7 @@ use ollama_rs::Ollama;
 use ollama_rs::generation::completion::request::GenerationRequest;
 use std::fmt;
 use tokio::io::AsyncBufReadExt;
-use tokio::io::{ AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio_stream::StreamExt;
 
 #[derive(Debug)]
@@ -56,10 +56,11 @@ async fn main() {
 }
 
 fn create_prompt(new_input: &str, _context: &Vec<Chat>) -> String {
-    
     let json_schema = include_str!("schema.json");
 
-     let prompt = format!("Hello! You have a job creating workflows. They should be as simple as possible. Please format your response like this: {{ message: string, workflow: JSON }}. The JSON should use this JSONSchema:\n\n{json_schema}\n\n");
+    let prompt = format!(
+        "Hello! You have a job creating workflows. They should be as simple as possible. Return the workflows as JSON The JSON should follow this JSONSchema:\n\n{json_schema}\n\n"
+    );
 
     format!("{prompt}\nHere are the requirements:\n\n{new_input}")
 }
@@ -80,7 +81,7 @@ async fn prompt(
     let mut buffer = Vec::new();
     while let Some(res) = stream.next().await {
         let responses = res.unwrap();
-            print!(".");
+        print!(".");
         for resp in responses {
             buffer.write_all(resp.response.as_bytes()).await.unwrap();
         }
