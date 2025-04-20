@@ -1,0 +1,504 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Flow",
+  "description": "Type representing a workflow",
+  "type": "object",
+  "required": [
+    "arguments",
+    "step"
+  ],
+  "properties": {
+    "arguments": {
+      "description": "Arguments for this workflow",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Argument"
+      }
+    },
+    "step": {
+      "description": "The steps",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Step"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "Argument": {
+      "type": "object",
+      "required": [
+        "name",
+        "ty"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of an argument",
+          "type": "string"
+        },
+        "ty": {
+          "description": "Type of an argument",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Type"
+            }
+          ]
+        }
+      }
+    },
+    "Path": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Pred": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "lhs",
+            "rhs",
+            "type"
+          ],
+          "properties": {
+            "lhs": {
+              "$ref": "#/definitions/Path"
+            },
+            "rhs": {
+              "$ref": "#/definitions/Value"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Eq"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Step": {
+      "description": "An expression type",
+      "oneOf": [
+        {
+          "description": "Do something, like get a user's age. Much like a function call",
+          "type": "object",
+          "required": [
+            "arguments",
+            "task",
+            "type"
+          ],
+          "properties": {
+            "arguments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Path"
+              }
+            },
+            "task": {
+              "$ref": "#/definitions/Task"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Task"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Bind the output of a step to a variable, and then run the rest of the steps",
+          "type": "object",
+          "required": [
+            "expr",
+            "identifier",
+            "rest",
+            "type"
+          ],
+          "properties": {
+            "expr": {
+              "$ref": "#/definitions/Step"
+            },
+            "identifier": {
+              "type": "string"
+            },
+            "rest": {
+              "$ref": "#/definitions/Step"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Let"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "first",
+            "then",
+            "type"
+          ],
+          "properties": {
+            "first": {
+              "$ref": "#/definitions/Step"
+            },
+            "then": {
+              "$ref": "#/definitions/Step"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Then"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "on_false",
+            "on_true",
+            "predicate",
+            "type"
+          ],
+          "properties": {
+            "on_false": {
+              "$ref": "#/definitions/Step"
+            },
+            "on_true": {
+              "$ref": "#/definitions/Step"
+            },
+            "predicate": {
+              "$ref": "#/definitions/Pred"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Choice"
+              ]
+            }
+          }
+        },
+        {
+          "description": "use `path` into the context, pointing at an array, then run `step` for every item inside",
+          "type": "object",
+          "required": [
+            "name",
+            "path",
+            "step",
+            "type"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "path": {
+              "$ref": "#/definitions/Path"
+            },
+            "step": {
+              "$ref": "#/definitions/Step"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Map"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "Succeed"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Workflow that fails",
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "Fail"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Task": {
+      "type": "object",
+      "required": [
+        "inputs",
+        "name",
+        "output"
+      ],
+      "properties": {
+        "inputs": {
+          "description": "Array of arguments and their types",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/definitions/Type"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "name": {
+          "description": "Name of the task",
+          "allOf": [
+            {
+              "$ref": "#/definitions/TaskName"
+            }
+          ]
+        },
+        "output": {
+          "description": "Type of the arguments",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Type"
+            }
+          ]
+        }
+      }
+    },
+    "TaskName": {
+      "oneOf": [
+        {
+          "description": "given a user's name as a string, return their age",
+          "type": "string",
+          "enum": [
+            "GetAge"
+          ]
+        },
+        {
+          "description": "Get some random user's name",
+          "type": "string",
+          "enum": [
+            "GetName"
+          ]
+        }
+      ]
+    },
+    "Type": {
+      "oneOf": [
+        {
+          "description": "An integer",
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "Int"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A string",
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "String"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A boolean",
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "Boolean"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A map from strings to other types",
+          "type": "object",
+          "required": [
+            "map",
+            "type"
+          ],
+          "properties": {
+            "map": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/definitions/Type"
+              }
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Map"
+              ]
+            }
+          }
+        },
+        {
+          "description": "An array of some type",
+          "type": "object",
+          "required": [
+            "array",
+            "type"
+          ],
+          "properties": {
+            "array": {
+              "$ref": "#/definitions/Type"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Array"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Value": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "int",
+            "type"
+          ],
+          "properties": {
+            "int": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Int"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "string",
+            "type"
+          ],
+          "properties": {
+            "string": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "String"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "boolean",
+            "type"
+          ],
+          "properties": {
+            "boolean": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Boolean"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "map",
+            "type"
+          ],
+          "properties": {
+            "map": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/definitions/Value"
+              }
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Map"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "array",
+            "type"
+          ],
+          "properties": {
+            "array": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Value"
+              }
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "Array"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

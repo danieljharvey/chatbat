@@ -55,16 +55,13 @@ async fn main() {
     }
 }
 
-fn create_prompt(new_input: &str, context: &Vec<Chat>) -> String {
-    let prefix = "We're having a chat. You are a great lad that keeps it brief, and only uses words that are no longer than 6 characters long.";
+fn create_prompt(new_input: &str, _context: &Vec<Chat>) -> String {
+    
+    let json_schema = include_str!("schema.json");
 
-    let mut prompt = format!("{}\nTo recap:\n", prefix);
+     let prompt = format!("Hello! You have a job creating workflows. They should be as simple as possible. Please format your response like this: {{ message: string, workflow: JSON }}. The JSON should use this JSONSchema:\n\n{json_schema}\n\n");
 
-    for Chat { input, response } in context {
-        prompt = format!("{prompt}\nI said '{input}', then you said '{response}'.\n")
-    }
-
-    format!("{prompt}\nThen finally I present a new question: {new_input}")
+    format!("{prompt}\nHere are the requirements:\n\n{new_input}")
 }
 
 async fn prompt(
@@ -74,7 +71,7 @@ async fn prompt(
     context: &Vec<Chat>,
 ) -> Result<String, MyError> {
     let total_prompt = create_prompt(prompt, context);
-    println!("PROMPT: {total_prompt}: PROMPT");
+
     let mut stream = ollama
         .generate_stream(GenerationRequest::new(model.to_string(), total_prompt))
         .await
