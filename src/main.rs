@@ -1,9 +1,5 @@
-use ollama_rs::Ollama;
-use ollama_rs::generation::completion::request::GenerationRequest;
 use std::fmt;
 use tokio::io::AsyncBufReadExt;
-use tokio::io::AsyncWriteExt;
-use tokio_stream::StreamExt;
 
 #[derive(Debug)]
 enum MyError {
@@ -35,56 +31,64 @@ struct Chat {
 
 #[tokio::main]
 async fn main() {
-    // By default, it will connect to localhost:11434
-    let ollama = Ollama::default();
-
     let model = "llama3.2:latest";
+    let json_schema = include_str!("schema.json");
 
     println!("Let's have a completely nice chat. What's up?");
-
-    let mut context = vec![];
 
     loop {
         let input = read_line().await.unwrap();
 
-        let response = prompt(&ollama, &model, &input, &context).await.unwrap();
+        let response = prompt(&model, &input).await.unwrap();
 
         println!("\n{}\n", response);
-
-        context.push(Chat { input, response });
     }
 }
 
-fn create_prompt(new_input: &str, _context: &Vec<Chat>) -> String {
-    let json_schema = include_str!("schema.json");
-
-    let prompt = format!(
-        "Hello! You have a job creating workflows. They should be as simple as possible. Return the workflows as JSON The JSON should follow this JSONSchema:\n\n{json_schema}\n\n"
-    );
+fn create_prompt(new_input: &str) -> String {
+    let prompt = "Hello! You have a job creating fake users.".to_string();
 
     format!("{prompt}\nHere are the requirements:\n\n{new_input}")
 }
 
-async fn prompt(
-    ollama: &Ollama,
-    model: &str,
-    prompt: &str,
-    context: &Vec<Chat>,
-) -> Result<String, MyError> {
-    let total_prompt = create_prompt(prompt, context);
+async fn prompt(model: &str, prompt: &str) -> Result<String, MyError> {
+    let total_prompt = create_prompt(prompt);
 
-    let mut stream = ollama
-        .generate_stream(GenerationRequest::new(model.to_string(), total_prompt))
-        .await
-        .unwrap();
-
-    let mut buffer = Vec::new();
-    while let Some(res) = stream.next().await {
-        let responses = res.unwrap();
-        print!(".");
-        for resp in responses {
-            buffer.write_all(resp.response.as_bytes()).await.unwrap();
-        }
+    let url = "http://localhost:11434/api/chat";
+    let json = serde_json::json!(
+    {
+      "model": "llama3.1",
+      "messages": [{"role": "user", "content": total_prompt}],
+      "stream": false,
+      "format": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "capital": {
+            "type": "string"
+          },
+          "languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "capital",
+          "languages"
+        ]
+      }
     }
-    String::from_utf8(buffer).map_err(|_| MyError::Other)
+            );
+
+    let client = reqwest::Client::new();
+    let res = client.post(url).json(&json).send().await.unwrap();
+
+    dbg!(&res);
+
+    Ok("".to_string())
 }
