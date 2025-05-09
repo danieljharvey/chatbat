@@ -1,9 +1,6 @@
-use ollama_rs::Ollama;
-use ollama_rs::generation::completion::request::GenerationRequest;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use tokio::io::AsyncBufReadExt;
-use tokio::io::{ AsyncWriteExt};
-use tokio_stream::StreamExt;
 
 #[derive(Debug)]
 enum MyError {
@@ -28,62 +25,96 @@ async fn read_line() -> Result<String, MyError> {
     String::from_utf8(buffer).map_err(|_| MyError::Other)
 }
 
-struct Chat {
-    input: String,
-    response: String,
-}
-
 #[tokio::main]
 async fn main() {
-    // By default, it will connect to localhost:11434
-    let ollama = Ollama::default();
-
-    let model = "llama3.2:latest";
-
+    println!("Please run: `OLLAMA_HOST=127.0.0.1:11435 ollama serve`");
     println!("Let's have a completely nice chat. What's up?");
 
-    let mut context = vec![];
+    let mut messages = vec![];
 
     loop {
         let input = read_line().await.unwrap();
 
-        let response = prompt(&ollama, &model, &input, &context).await.unwrap();
+        let country = prompt(&input, &mut messages).await.unwrap();
 
-        println!("\n{}\n", response);
-
-        context.push(Chat { input, response });
+        println!("\n{:?}\n", country);
     }
 }
 
-fn create_prompt(new_input: &str, _context: &Vec<Chat>) -> String {
-    
-    let json_schema = include_str!("schema.json");
-
-     let prompt = format!("Hello! You have a job creating workflows. They should be as simple as possible. Please format your response like this: {{ message: string, workflow: JSON }}. The JSON should use this JSONSchema:\n\n{json_schema}\n\n");
+fn create_prompt(new_input: &str) -> String {
+    let prompt = "Hello! Please help me remember countries.".to_string();
 
     format!("{prompt}\nHere are the requirements:\n\n{new_input}")
 }
 
-async fn prompt(
-    ollama: &Ollama,
-    model: &str,
-    prompt: &str,
-    context: &Vec<Chat>,
-) -> Result<String, MyError> {
-    let total_prompt = create_prompt(prompt, context);
+#[derive(Debug, Deserialize, Serialize)]
+struct Message {
+    role: String,
+    content: String,
+}
 
-    let mut stream = ollama
-        .generate_stream(GenerationRequest::new(model.to_string(), total_prompt))
-        .await
-        .unwrap();
+#[derive(Debug, Deserialize, Serialize)]
+struct OllamaResponse {
+    model: String,
+    created_at: String,
+    message: Message,
+}
 
-    let mut buffer = Vec::new();
-    while let Some(res) = stream.next().await {
-        let responses = res.unwrap();
-            print!(".");
-        for resp in responses {
-            buffer.write_all(resp.response.as_bytes()).await.unwrap();
-        }
+#[derive(Debug, Deserialize, Serialize)]
+struct Country {
+    name: String,
+    capital: String,
+    languages: Vec<String>,
+}
+
+async fn prompt(prompt: &str, messages: &mut Vec<Message>) -> Result<Country, MyError> {
+    let total_prompt = create_prompt(prompt);
+
+    let url = "http://localhost:11435/api/chat";
+    messages.push(Message {
+        role: "user".to_string(),
+        content: total_prompt,
+    });
+
+    let json = serde_json::json!(
+    {
+      "model": "llama3.2",
+      "messages": messages,
+      "stream": false,
+      "format": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "capital": {
+            "type": "string"
+          },
+          "languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "capital",
+          "languages"
+        ]
+      }
     }
-    String::from_utf8(buffer).map_err(|_| MyError::Other)
+            );
+
+    let client = reqwest::Client::new();
+    let res = client.post(url).json(&json).send().await.unwrap();
+
+    let json_response: OllamaResponse = res.json().await.unwrap();
+
+    let inner_json = serde_json::from_str(&json_response.message.content).unwrap();
+
+    // keep response for content
+    messages.push(json_response.message);
+
+    Ok(inner_json)
 }

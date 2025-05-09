@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ollama-rs = { git = "https://github.com/pepperoni21/ollama-rs.git", tag = "v0.3.0", features = ["stream"] }
-tokio = "*"
+serde = { version = "*", features = ['derive'] }
+serde_json = "*"
+reqwest = { version = "*", features = ['json'] }
+tokio = { version = "1", features = ["full"] }
 tokio-stream = "*"
 futures = "*"
