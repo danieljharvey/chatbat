@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use tokio::io::AsyncBufReadExt;
 
@@ -24,41 +25,61 @@ async fn read_line() -> Result<String, MyError> {
     String::from_utf8(buffer).map_err(|_| MyError::Other)
 }
 
-struct Chat {
-    input: String,
-    response: String,
-}
-
 #[tokio::main]
 async fn main() {
-    let model = "llama3.2:latest";
-    let json_schema = include_str!("schema.json");
-
+    println!("Please run: `OLLAMA_HOST=127.0.0.1:11435 ollama serve`");
     println!("Let's have a completely nice chat. What's up?");
+
+    let mut messages = vec![];
 
     loop {
         let input = read_line().await.unwrap();
 
-        let response = prompt(&model, &input).await.unwrap();
+        let country = prompt(&input, &mut messages).await.unwrap();
 
-        println!("\n{}\n", response);
+        println!("\n{:?}\n", country);
     }
 }
 
 fn create_prompt(new_input: &str) -> String {
-    let prompt = "Hello! You have a job creating fake users.".to_string();
+    let prompt = "Hello! Please help me remember countries.".to_string();
 
     format!("{prompt}\nHere are the requirements:\n\n{new_input}")
 }
 
-async fn prompt(model: &str, prompt: &str) -> Result<String, MyError> {
+#[derive(Debug, Deserialize, Serialize)]
+struct Message {
+    role: String,
+    content: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct OllamaResponse {
+    model: String,
+    created_at: String,
+    message: Message,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Country {
+    name: String,
+    capital: String,
+    languages: Vec<String>,
+}
+
+async fn prompt(prompt: &str, messages: &mut Vec<Message>) -> Result<Country, MyError> {
     let total_prompt = create_prompt(prompt);
 
-    let url = "http://localhost:11434/api/chat";
+    let url = "http://localhost:11435/api/chat";
+    messages.push(Message {
+        role: "user".to_string(),
+        content: total_prompt,
+    });
+
     let json = serde_json::json!(
     {
-      "model": "llama3.1",
-      "messages": [{"role": "user", "content": total_prompt}],
+      "model": "llama3.2",
+      "messages": messages,
       "stream": false,
       "format": {
         "type": "object",
@@ -88,7 +109,12 @@ async fn prompt(model: &str, prompt: &str) -> Result<String, MyError> {
     let client = reqwest::Client::new();
     let res = client.post(url).json(&json).send().await.unwrap();
 
-    dbg!(&res);
+    let json_response: OllamaResponse = res.json().await.unwrap();
 
-    Ok("".to_string())
+    let inner_json = serde_json::from_str(&json_response.message.content).unwrap();
+
+    // keep response for content
+    messages.push(json_response.message);
+
+    Ok(inner_json)
 }
