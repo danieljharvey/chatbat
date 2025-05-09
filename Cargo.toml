@@ -4,11 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-<<<<<<< HEAD
 serde = { version = "*", features = ['derive'] }
-=======
-serde = "*"
->>>>>>> 8db1617 (What)
 serde_json = "*"
 reqwest = { version = "*", features = ['json'] }
 tokio = { version = "1", features = ["full"] }
