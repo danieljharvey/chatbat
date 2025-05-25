@@ -1,8 +1,10 @@
+use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::fmt::Debug;
 use tokio::io::AsyncBufReadExt;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum MyError {
     Other,
 }
@@ -28,16 +30,17 @@ async fn read_line() -> Result<String, MyError> {
 #[tokio::main]
 async fn main() {
     println!("Please run: `OLLAMA_HOST=127.0.0.1:11435 ollama serve`");
-    println!("Let's have a completely nice chat. What's up?");
+    println!("Describe a country");
 
     let mut messages = vec![];
 
     loop {
         let input = read_line().await.unwrap();
 
-        let country = prompt(&input, &mut messages).await.unwrap();
+        let response: ResponseWith<Country> = multi_prompt(&input, &mut messages).await.unwrap();
 
-        println!("\n{:?}\n", country);
+        println!("\n{:?}\n", response.response);
+        println!("Accuracy {}%", response.similarity);
     }
 }
 
@@ -47,7 +50,7 @@ fn create_prompt(new_input: &str) -> String {
     format!("{prompt}\nHere are the requirements:\n\n{new_input}")
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct Message {
     role: String,
     content: String,
@@ -60,14 +63,52 @@ struct OllamaResponse {
     message: Message,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
 struct Country {
     name: String,
     capital: String,
     languages: Vec<String>,
 }
 
-async fn prompt(prompt: &str, messages: &mut Vec<Message>) -> Result<Country, MyError> {
+#[derive(Debug, PartialEq)]
+struct ResponseWith<A> {
+    response: A,
+    similarity: usize,
+}
+
+async fn multi_prompt<A>(
+    input: &str,
+    messages: &mut Vec<Message>,
+) -> Result<ResponseWith<A>, MyError>
+where
+    A: for<'a> serde::Deserialize<'a> + serde::Serialize + JsonSchema + Debug + PartialEq,
+{
+    let mut messages_copy = messages.clone();
+    let resp_a = prompt::<A>(input, messages).await?;
+    let resp_b = prompt::<A>(input, &mut messages_copy).await?;
+
+    // Levenshtein distance
+    let distance = distance::levenshtein(
+        serde_json::to_string(&resp_a)
+            .unwrap()
+            .to_ascii_uppercase()
+            .as_str(),
+        serde_json::to_string(&resp_b)
+            .unwrap()
+            .to_ascii_uppercase()
+            .as_str(),
+    );
+
+    Ok(ResponseWith {
+        response: resp_a,
+        similarity: 100 - distance,
+    })
+}
+
+async fn prompt<A>(prompt: &str, messages: &mut Vec<Message>) -> Result<A, MyError>
+where
+    A: for<'a> serde::Deserialize<'a> + JsonSchema,
+{
     let total_prompt = create_prompt(prompt);
 
     let url = "http://localhost:11435/api/chat";
@@ -76,35 +117,14 @@ async fn prompt(prompt: &str, messages: &mut Vec<Message>) -> Result<Country, My
         content: total_prompt,
     });
 
-    let json = serde_json::json!(
-    {
+    let schema = schema_for!(A);
+
+    let json = serde_json::json!({
       "model": "llama3.2",
       "messages": messages,
       "stream": false,
-      "format": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "capital": {
-            "type": "string"
-          },
-          "languages": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "name",
-          "capital",
-          "languages"
-        ]
-      }
-    }
-            );
+      "format": schema
+    });
 
     let client = reqwest::Client::new();
     let res = client.post(url).json(&json).send().await.unwrap();
