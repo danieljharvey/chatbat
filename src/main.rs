@@ -1,5 +1,6 @@
 use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
+use std::cmp::max;
 use std::fmt;
 use std::fmt::Debug;
 use tokio::io::AsyncBufReadExt;
@@ -30,22 +31,26 @@ async fn read_line() -> Result<String, MyError> {
 #[tokio::main]
 async fn main() {
     println!("Please run: `OLLAMA_HOST=127.0.0.1:11435 ollama serve`");
-    println!("Describe a country");
+    println!("Ask me to plan something");
 
     let mut messages = vec![];
 
     loop {
         let input = read_line().await.unwrap();
 
-        let response: ResponseWith<Country> = multi_prompt(&input, &mut messages).await.unwrap();
+        let response: ResponseWith<PlanResponse> =
+            multi_prompt(&input, &mut messages).await.unwrap();
 
-        println!("\n{:?}\n", response.response);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&response.response).unwrap()
+        );
         println!("Accuracy {}%", response.similarity);
     }
 }
 
 fn create_prompt(new_input: &str) -> String {
-    let prompt = "Hello! Please help me remember countries.".to_string();
+    let prompt = "Hello! I need you to help me break down some tasks into steps. Keep the titles short and snappy, and include a list of items I will require with each step. Please request further clarifications if anything is unclear by returning a FollowUpQuestion.".to_string();
 
     format!("{prompt}\nHere are the requirements:\n\n{new_input}")
 }
@@ -64,10 +69,26 @@ struct OllamaResponse {
 }
 
 #[derive(Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
-struct Country {
-    name: String,
-    capital: String,
-    languages: Vec<String>,
+struct Task {
+    title: String,
+    instructions: String,
+    items: Vec<String>,
+}
+
+#[derive(Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
+struct Plan {
+    tasks: Vec<Task>,
+}
+
+#[derive(Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
+enum PlanResponse {
+    Plan(Plan),
+    FollowUpQuestion(FollowUpQuestion),
+}
+
+#[derive(Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
+struct FollowUpQuestion {
+    question: String,
 }
 
 #[derive(Debug, PartialEq)]
@@ -87,21 +108,19 @@ where
     let resp_a = prompt::<A>(input, messages).await?;
     let resp_b = prompt::<A>(input, &mut messages_copy).await?;
 
+    let resp_a_string = serde_json::to_string(&resp_a).unwrap().to_ascii_uppercase();
+    let resp_b_string = serde_json::to_string(&resp_b).unwrap().to_ascii_uppercase();
+
     // Levenshtein distance
-    let distance = distance::levenshtein(
-        serde_json::to_string(&resp_a)
-            .unwrap()
-            .to_ascii_uppercase()
-            .as_str(),
-        serde_json::to_string(&resp_b)
-            .unwrap()
-            .to_ascii_uppercase()
-            .as_str(),
-    );
+    let distance = distance::levenshtein(resp_a_string.as_str(), resp_b_string.as_str());
+
+    let max_len = max(resp_a_string.len(), resp_b_string.len());
+
+    let similarity = distance * 100 / max_len;
 
     Ok(ResponseWith {
         response: resp_a,
-        similarity: 100 - distance,
+        similarity,
     })
 }
 
