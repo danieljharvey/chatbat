@@ -28,10 +28,9 @@ async fn main() {
 
     let prompt = create_prompt(&input);
 
-    let response: shared::ResponseWith<ProgramType> =
-        shared::multi_prompt(&prompt, &mut messages).await.unwrap();
+    let response: ProgramType = shared::prompt(&prompt, &mut messages).await.unwrap();
 
-    match response.response {
+    match response {
         ProgramType::TaskPlanner => task_planner::main().await,
         ProgramType::WebsiteMaker => website_maker::main().await,
     }

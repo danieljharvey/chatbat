@@ -1,6 +1,6 @@
+use futures::future;
 use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
-use std::cmp::max;
 use std::fmt;
 use std::fmt::Debug;
 use tokio::io::AsyncBufReadExt;
@@ -43,8 +43,9 @@ struct OllamaResponse {
 
 #[derive(Debug, PartialEq)]
 pub struct ResponseWith<A> {
-    pub response: A,
-    pub similarity: usize,
+    pub response_a: A,
+    pub response_b: A,
+    pub compare_score: u32,
 }
 
 pub async fn multi_prompt<A>(
@@ -55,23 +56,35 @@ where
     A: for<'a> serde::Deserialize<'a> + serde::Serialize + JsonSchema + Debug + PartialEq,
 {
     let mut messages_copy = messages.clone();
-    let resp_a = prompt::<A>(input, messages).await?;
-    let resp_b = prompt::<A>(input, &mut messages_copy).await?;
+
+    let a = prompt::<A>(input, messages);
+    let b = prompt::<A>(input, &mut messages_copy);
+
+    let (resp_a, resp_b) = future::join(a, b).await;
+    let resp_a = resp_a?;
+    let resp_b = resp_b?;
 
     let resp_a_string = serde_json::to_string(&resp_a).unwrap().to_ascii_uppercase();
     let resp_b_string = serde_json::to_string(&resp_b).unwrap().to_ascii_uppercase();
 
-    // Levenshtein distance
-    let distance = distance::levenshtein(resp_a_string.as_str(), resp_b_string.as_str());
-
-    let max_len = max(resp_a_string.len(), resp_b_string.len());
-
-    let similarity = distance * 100 / max_len;
+    let compare_score = compare_with_llm(&resp_a_string, &resp_b_string).await?;
 
     Ok(ResponseWith {
-        response: resp_a,
-        similarity,
+        response_a: resp_a,
+        response_b: resp_b,
+        compare_score,
     })
+}
+
+async fn compare_with_llm(a: &str, b: &str) -> Result<u32, MyError> {
+    prompt(
+        &format!(
+            "Please compare {} and {} and describe how similar they are between 1 and 100",
+            a, b,
+        ),
+        &mut vec![],
+    )
+    .await
 }
 
 pub async fn prompt<A>(prompt: &str, messages: &mut Vec<Message>) -> Result<A, MyError>
