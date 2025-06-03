@@ -74,7 +74,7 @@ where
     })
 }
 
-async fn prompt<A>(prompt: &str, messages: &mut Vec<Message>) -> Result<A, MyError>
+pub async fn prompt<A>(prompt: &str, messages: &mut Vec<Message>) -> Result<A, MyError>
 where
     A: for<'a> serde::Deserialize<'a> + JsonSchema,
 {
@@ -87,7 +87,7 @@ where
     let schema = schema_for!(A);
 
     let json = serde_json::json!({
-      "model": "llama3.2",
+      "model": "qwen2.5-coder:7b", //"deepseek-r1:7b",
       "messages": messages,
       "stream": false,
       "format": schema
