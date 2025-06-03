@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 mod shared;
 mod task_planner;
+mod website_maker;
 
 fn create_prompt(new_input: &str) -> String {
     let prompt = "Hello! I need you to decide which program we're going to run.".to_string();
@@ -13,6 +14,7 @@ fn create_prompt(new_input: &str) -> String {
 #[derive(Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
 enum ProgramType {
     TaskPlanner,
+    WebsiteMaker,
 }
 
 #[tokio::main]
@@ -31,5 +33,6 @@ async fn main() {
 
     match response.response {
         ProgramType::TaskPlanner => task_planner::main().await,
+        ProgramType::WebsiteMaker => website_maker::main().await,
     }
 }
