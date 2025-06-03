@@ -16,16 +16,39 @@ pub async fn main() {
         let response: shared::ResponseWith<PlanResponse> =
             shared::multi_prompt(&prompt, &mut messages).await.unwrap();
 
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&response.response).unwrap()
-        );
-        println!("Accuracy {}%", response.similarity);
+        match response.response_a {
+            PlanResponse::Plan(plan) => {
+                println!("Accuracy {}%", response.compare_score);
+                println!("{}", serde_json::to_string_pretty(&plan).unwrap());
+            }
+            PlanResponse::FollowUpQuestion(question) => {
+                println!("{}", question.question);
+            }
+            PlanResponse::RequestMyLocation => {
+                println!("Where are you currently?");
+            }
+        }
     }
 }
 
 fn create_prompt(new_input: &str) -> String {
-    let prompt = "Hello! I need you to help me break down some tasks into steps. Keep the titles short and snappy, and include a list of items I will require with each step. Please request further clarifications if anything is unclear by returning a FollowUpQuestion. I expect multiple tasks, please ask for more details if you do not yet have any.".to_string();
+    let prompt = r#"
+        Hello! 
+
+        I need you to help me break down some tasks into steps. 
+
+        If anything is unclear, please return a `FollowUpQuestion`.
+        If you'd like to know my current location, return a `RequestMyLocation`, but only once.
+
+        If you have enough information, return a `Plan`.
+
+        Things to ensure before returning a plan:
+        - I know where I am travelling, and how I will get there  
+        - If I need to take anything with me, and how I will transport those things
+        - Who is coming with me.
+
+        Keep the titles short and snappy, and include a list of items I will require with each step. 
+        "#.to_string();
 
     format!("{prompt}\nHere are the requirements:\n\n{new_input}")
 }
@@ -46,6 +69,7 @@ struct Plan {
 enum PlanResponse {
     Plan(Plan),
     FollowUpQuestion(FollowUpQuestion),
+    RequestMyLocation,
 }
 
 #[derive(Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
